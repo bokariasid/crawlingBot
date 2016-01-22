@@ -10,7 +10,6 @@ from naukriJobCrawl.items import DbOperations
 class NaukriSpider(scrapy.Spider):
 	name = "naukriJobCrawl"
 	allowed_domains = ["jobsearch.naukri.com/"]
-	start_urls = ["http://jobsearch.naukri.com/amazon-jobs"]
 	db = DbOperations()	
 	sql = """SELECT comp.txtName 
 			FROM tblinterviwer as inter 
