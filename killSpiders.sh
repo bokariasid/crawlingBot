@@ -1,1 +1,3 @@
-ps aux | grep python | grep -v "grep python" | awk '{print $2}' | xargs pkill -9
+while pkill -9 27082; do
+pkill -9 27082
+done
