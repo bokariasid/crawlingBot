@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*- clstrFrm
 # fields to always be changed:qtc,qp,fpsubmiturl,companyId
-import scrapy
+import scrapy,json
 from scrapy.http import FormRequest
 from scrapy.selector import Selector
 from scrapy.linkextractors import LinkExtractor
 import sys , urllib2 , pprint , re
 from naukriJobCrawl.items import DbOperations
+from StringIO import StringIO
 from bs4 import BeautifulSoup
 companyCombo = []
 urlCounter = 1
@@ -18,7 +19,7 @@ class CrawlSpider(scrapy.Spider):
     start_urls = []
     pp = pprint.PrettyPrinter(indent=4)
     db = DbOperations()
-    sql = "SELECT * FROM naukri_ro_company_mapping"
+    sql = "SELECT * FROM naukri_ro_company_mapping limit 1"
     results = db.executeQuery(sql)
     for company in results:
         companyAttributes = {}
@@ -137,6 +138,21 @@ class CrawlSpider(scrapy.Spider):
             try:
                 jobPage = urllib2.urlopen(jobUrl).read()
                 jobDescriptionParser = BeautifulSoup(jobPage)
+                jsonText = jobDescriptionParser.find("script")
+                jsonString = jsonText.getText().replace("dataLayer =[]; dataLayer.push(","").replace(");","")
+                try:
+                    jsonString = ' '.join(jsonString.replace("        ","").split())
+                    jsonString = jsonString.replace("{ ","{").replace("'",'"')
+                    jsonString = jsonString.split("}")[0]+"}"
+                    jsonString = json.loads(jsonString)
+                    jobAttr["functionalArea"] = jsonString["JD_Farea"]
+                    jobAttr["keywords"] = jsonString["JD_keyword"]
+                    jobAttr["min_exp"] = jsonString["JD_Exp_min"]
+                    jobAttr["max_exp"] = jsonString["JD_Exp_max"]
+                    jobAttr["min_sal"] = jsonString["JD_Sal_min"]
+                    jobAttr["max_sal"] = jsonString["JD_Sal_max"]
+                except Exception, e:
+                    print str(e)
                 try:
                     jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.find("ul",itemprop="description").getText().replace("\t","").replace("\n","").split()).replace("'","")
                 except:
