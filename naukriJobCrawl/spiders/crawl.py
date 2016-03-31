@@ -19,7 +19,7 @@ class CrawlSpider(scrapy.Spider):
     start_urls = []
     pp = pprint.PrettyPrinter(indent=4)
     db = DbOperations()
-    sql = "SELECT * FROM naukri_ro_company_mapping limit 1"
+    sql = "SELECT * FROM naukri_ro_company_mapping"
     results = db.executeQuery(sql)
     for company in results:
         companyAttributes = {}
@@ -69,7 +69,10 @@ class CrawlSpider(scrapy.Spider):
         if len(jobs) > 0:
             for job in jobs:
                 jobAttr = self.getJobAttributes(job)
-                db.insertJob(jobAttr,company['ro_id'])
+                if(jobAttr):
+                    db.insertJob(jobAttr,company['ro_id'])
+                else:
+                    print jobAttr
 
     def parse2(self, response):
         global companyCombo,urlCounter,urlCompany
@@ -110,67 +113,63 @@ class CrawlSpider(scrapy.Spider):
         jobAttr = {}
         elementParser = BeautifulSoup(job)
         jobAttr['jobId'] = db.cleanSpacesAndCharacters(elementParser.find("div",type="tuple").get("id"))
-        sql = """SELECT * FROM naukri_jobs_4 WHERE  naukri_job_id = '"""+str(jobAttr['jobId'])+"""'"""
-        result = db.executeQuery(sql)
-        if not result:
-            jobAttr['companyName'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="hiringOrganization").getText())
-            jobAttr['title'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="title").getText())
-            jobAttr['jobLocation'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="jobLocation").getText())
-            jobAttr['experience'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="experienceRequirements").getText())
-            jobAttr['salary'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="baseSalary").getText())
+        jobAttr['companyName'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="hiringOrganization").getText())
+        jobAttr['title'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="title").getText())
+        jobAttr['jobLocation'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="jobLocation").getText())
+        jobAttr['experience'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="experienceRequirements").getText())
+        jobAttr['salary'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="baseSalary").getText())
+        try:
+            jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="description").getText())
+        except:
             try:
-                jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("span",itemprop="description").getText())
+                jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("div",class_="more").getText())
             except:
                 try:
-                    jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("div",class_="more").getText())
-                except:
-                    try:
-                        jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("div",{"class":"desc"}).getText())
-                    except:
-                        pass
-            try:
-                jobAttr['source'] = db.cleanSpacesAndCharacters(elementParser.find("div",class_ = "rec_details").getText())
-            except:
-                jobAttr['source'] = jobAttr['companyName']
-
-            jobUrl = elementParser.find("a").get("href")
-            jobAttr['jobUrl'] = jobUrl
-            try:
-                jobPage = urllib2.urlopen(jobUrl).read()
-                jobDescriptionParser = BeautifulSoup(jobPage)
-                jsonText = jobDescriptionParser.find("script")
-                jsonString = jsonText.getText().replace("dataLayer =[]; dataLayer.push(","").replace(");","")
-                try:
-                    jsonString = ' '.join(jsonString.replace("        ","").split())
-                    jsonString = jsonString.replace("{ ","{").replace("'",'"')
-                    jsonString = jsonString.split("}")[0]+"}"
-                    jsonString = json.loads(jsonString)
-                    jobAttr["functionalArea"] = jsonString["JD_Farea"]
-                    jobAttr["keywords"] = jsonString["JD_keyword"]
-                    jobAttr["min_exp"] = jsonString["JD_Exp_min"]
-                    jobAttr["max_exp"] = jsonString["JD_Exp_max"]
-                    jobAttr["min_sal"] = jsonString["JD_Sal_min"]
-                    jobAttr["max_sal"] = jsonString["JD_Sal_max"]
+                    jobAttr['jobSnippet'] = db.cleanSpacesAndCharacters(elementParser.find("div",{"class":"desc"}).getText())
                 except Exception, e:
                     print str(e)
+        try:
+            jobAttr['source'] = db.cleanSpacesAndCharacters(elementParser.find("div",class_ = "rec_details").getText())
+        except:
+            jobAttr['source'] = jobAttr['companyName']
+
+        jobUrl = elementParser.find("a").get("href")
+        jobAttr['jobUrl'] = jobUrl
+        try:
+            jobPage = urllib2.urlopen(jobUrl).read()
+            jobDescriptionParser = BeautifulSoup(jobPage)
+            jsonText = jobDescriptionParser.find("script")
+            jsonString = jsonText.getText().replace("dataLayer =[]; dataLayer.push(","").replace(");","")
+            try:
+                jsonString = ' '.join(jsonString.replace("        ","").split())
+                jsonString = jsonString.replace("{ ","{").replace("'",'"')
+                jsonString = jsonString.split("}")[0]+"}"
+                jsonString = json.loads(jsonString)
+                jobAttr["functionalArea"] = jsonString["JD_Farea"] if jsonString["JD_Farea"] else ""
+                jobAttr["keywords"] = jsonString["JD_keyword"] if jsonString["JD_keyword"] else ""
+                jobAttr["min_exp"] = jsonString["JD_Exp_min"] if jsonString["JD_Exp_min"] else ""
+                jobAttr["max_exp"] = jsonString["JD_Exp_max"] if jsonString["JD_Exp_max"] else ""
+                jobAttr["min_sal"] = jsonString["JD_Sal_min"] if jsonString["JD_Sal_min"] else ""
+                jobAttr["max_sal"] = jsonString["JD_Sal_max"] if jsonString["JD_Sal_max"] else ""
+            except Exception, e:
+                print str(e)
+            try:
+                jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.find("ul",itemprop="description").getText().replace("\t","").replace("\n","").split()).replace("'","")
+            except:
                 try:
-                    jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.find("ul",itemprop="description").getText().replace("\t","").replace("\n","").split()).replace("'","")
+                    jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.find("div",class_="f14 lh18 alignJ disc-li").getText().replace("\t","").replace("\n","").split()).replace("'","")
                 except:
                     try:
-                        jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.find("div",class_="f14 lh18 alignJ disc-li").getText().replace("\t","").replace("\n","").split()).replace("'","")
+                        jobAttr['jobDescription'] = jobDescriptionParser.find("meta",{"property":"og:description"})
+                        jobAttr['jobDescription'] = db.cleanSpacesAndCharacters(jobAttr['jobDescription']['content'])
+                        indexOfKeyword = jobAttr['jobDescription'].index("Keywords")
+                        if indexOfKeyword:
+                            jobAttr['jobDescription'] = jobAttr['jobDescription'][indexOfKeyword:]
                     except:
                         try:
-                            jobAttr['jobDescription'] = jobDescriptionParser.find("meta",{"property":"og:description"})
-                            jobAttr['jobDescription'] = db.cleanSpacesAndCharacters(jobAttr['jobDescription']['content'])
-                            indexOfKeyword = jobAttr['jobDescription'].index("Keywords")
-                            if indexOfKeyword:
-                                jobAttr['jobDescription'] = jobAttr['jobDescription'][indexOfKeyword:]
+                            jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.findAll("td",{"class":"detailJob"})[2].getText().replace("\t","").replace("\n","").split()).replace("'","")
                         except:
-                            try:
-                                jobAttr['jobDescription'] = ' '.join(jobDescriptionParser.findAll("td",{"class":"detailJob"})[2].getText().replace("\t","").replace("\n","").split()).replace("'","")
-                            except:
-                                jobAttr['jobDescription'] = jobAttr['jobSnippet']
-            except:
-                return
-
-            return jobAttr
+                            jobAttr['jobDescription'] = jobAttr['jobSnippet']
+        except Exception, e:
+            print str(e)
+        return jobAttr
